@@ -1,0 +1,40 @@
+strategies:
+  hft:
+    enabled: true
+    min_tick_data: 1000
+    indicators:
+      - name: "RSI"
+        period: 14
+        overbought: 70
+        oversold: 30
+      - name: "MFI"
+        period: 14
+        
+  trend_following:
+    enabled: true
+    indicators:
+      - name: "MA"
+        fast_period: 20
+        slow_period: 50
+      - name: "ADX"
+        period: 14
+        threshold: 25
+        
+  counter_trend:
+    enabled: true
+    indicators:
+      - name: "RSI"
+        period: 14
+        overbought: 70
+        oversold: 30
+      - name: "Stochastic"
+        k_period: 14
+        d_period: 3
+        
+  scalping:
+    enabled: true
+    indicators:
+      - name: "RSI"
+        period: 9
+      - name: "MFI"
+        period: 14
