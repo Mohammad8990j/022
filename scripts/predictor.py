@@ -1,4 +1,3 @@
-
 import os
 import sys
 from pathlib import Path
@@ -9,9 +8,9 @@ sys.path.append(str(project_root))
 
 import pandas as pd
 import torch
-from src.models.cnn_model import CNN
-from src.models.lstm_model import LSTM
-from src.models.transformer_model import Transformer
+from src.models.cnn_model import CNNModel  # اصلاح ایمپورت
+from src.models.lstm_model import LSTMModel  # اصلاح ایمپورت
+from src.models.transformer_model import TransformerModel
 from stable_baselines3 import PPO, DQN
 import logging
 
@@ -36,15 +35,15 @@ if not os.path.exists(SIGNALS_DIR):
 # بارگذاری مدل‌های نظارتی
 def load_supervised_models():
     try:
-        cnn_model = CNN(input_channels=3, output_size=3)
+        cnn_model = CNNModel(input_channels=3, output_size=3)
         cnn_model.load_state_dict(torch.load(os.path.join(MODEL_DIR, "cnn_model.pt")))
         cnn_model.eval()
 
-        lstm_model = LSTM(input_size=3, hidden_size=64, num_layers=2, output_size=1)
+        lstm_model = LSTMModel(input_size=3, hidden_size=64, num_layers=2, output_size=1)
         lstm_model.load_state_dict(torch.load(os.path.join(MODEL_DIR, "lstm_model.pt")))
         lstm_model.eval()
 
-        transformer_model = Transformer(input_size=20, num_heads=2, num_layers=2, output_size=3)
+        transformer_model = TransformerModel(input_size=20, num_heads=2, num_layers=2, output_size=3)
         transformer_model.load_state_dict(torch.load(os.path.join(MODEL_DIR, "transformer_model.pt")))
         transformer_model.eval()
 
@@ -69,7 +68,24 @@ def load_reinforcement_models():
 # پیش‌بینی با مدل‌های نظارتی
 def predict_with_supervised_models(cnn_model, lstm_model, transformer_model, data):
     try:
-        cnn_signals = cnn_model(torch.tensor(data).float()).argmax(dim=1).tolist()
+        # تبدیل داده‌ها به نوع عددی
+        data = data.astype(float)
+        
+        # اطمینان از اینکه داده‌ها دارای ابعاد مناسب هستند
+        if data.ndim != 2 or data.shape[1] < 3:
+            raise ValueError(f"داده‌های ورودی دارای ابعاد نادرست هستند: {data.shape}. انتظار [Batch, Features >= 3].")
+
+        # تبدیل داده‌ها به قالب [Batch Size, Channels, Features]
+        data_cnn = torch.tensor(data).float()
+        
+        # اطمینان از داشتن 3 کانال (تکرار داده‌ها در صورت نیاز)
+        if data_cnn.shape[1] == 1:
+            data_cnn = data_cnn.repeat(1, 3, 1)  # تکرار کانال‌ها برای ایجاد 3 کانال
+        
+        data_cnn = data_cnn.unsqueeze(1)  # تبدیل به [Batch Size, Channels, Length]
+
+        # پیش‌بینی با مدل‌ها
+        cnn_signals = cnn_model(data_cnn).argmax(dim=1).tolist()
         lstm_signals = lstm_model(torch.tensor(data).float()).detach().squeeze().tolist()
         transformer_signals = transformer_model(torch.tensor(data).float()).argmax(dim=1).tolist()
 
@@ -78,7 +94,6 @@ def predict_with_supervised_models(cnn_model, lstm_model, transformer_model, dat
     except Exception as e:
         logging.exception(f"خطا در پیش‌بینی با مدل‌های نظارتی: {e}")
         return None, None, None
-
 # تولید سیگنال‌های معاملاتی
 def generate_signals():
     try:
@@ -91,9 +106,16 @@ def generate_signals():
             return
 
         # بارگذاری داده‌های جدید
-        data_files = [f for f in os.listdir(PROCESSED_DATA_DIR) if f.endswith(".csv")]
+        data_files = [f for f in os.listdir(PROCESSED_DATA_DIR) if f.endswith(".parquet")]
         latest_file = sorted(data_files)[-1]
         data = pd.read_csv(os.path.join(PROCESSED_DATA_DIR, latest_file)).dropna().values
+
+        # بررسی و تبدیل داده‌ها به نوع عددی
+        try:
+            data = data.astype(float)
+        except ValueError as e:
+            logging.error(f"خطا در تبدیل داده‌ها به نوع عددی: {e}")
+            return
 
         # پیش‌بینی با مدل‌های نظارتی
         cnn_signals, lstm_signals, transformer_signals = predict_with_supervised_models(
